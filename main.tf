@@ -83,7 +83,7 @@ resource "aws_security_group" "cloudforge_sg" {
   egress {
     from_port   = 0
     to_port     = 0
-    protocol    ="-1"
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -94,9 +94,9 @@ resource "aws_security_group" "cloudforge_sg" {
 
 # 6. EC2 Server Instance
 resource "aws_instance" "cloudforge_server" {
-  ami           = "ami-0c7217cdde317cfec" # Ubuntu 22.04 LTS in us-east-1
-  instance_type = var.instance_type
-  subnet_id     = aws_subnet.cloudforge_subnet.id
+  ami                    = "ami-0c7217cdde317cfec" # Ubuntu 22.04 LTS in us-east-1
+  instance_type          = var.instance_type
+  subnet_id              = aws_subnet.cloudforge_subnet.id
   vpc_security_group_ids = [aws_security_group.cloudforge_sg.id]
 
   user_data = file("userdata.sh")
