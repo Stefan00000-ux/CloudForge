@@ -74,7 +74,7 @@ resource "aws_instance" "this" {
   subnet_id              = aws_subnet.this.id
   vpc_security_group_ids = [aws_security_group.this.id]
 
-  user_data = file("${path.module}/../../userdata.sh")
+  user_data = file("${path.root}/userdata.sh")
 
   tags = {
     Name = "CloudForge-Server-${count.index + 1}-${var.environment}"
