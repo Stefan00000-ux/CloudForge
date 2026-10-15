@@ -1,3 +1,13 @@
+data "aws_ami" "amazon_linux" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-2023.*-x86_64"]
+  }
+}
+
 resource "aws_vpc" "this" {
   cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
@@ -69,7 +79,7 @@ resource "aws_security_group" "this" {
 
 resource "aws_instance" "this" {
   count                  = var.server_count
-  ami                    = "ami-0c7217cdde317cfec"
+  ami                    = data.aws_ami.amazon_linux.id
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.this.id
   vpc_security_group_ids = [aws_security_group.this.id]
