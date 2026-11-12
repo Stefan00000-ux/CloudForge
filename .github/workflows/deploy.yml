@@ -4,10 +4,38 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Infrastructure Action (Deploy or Destroy)"
+        required: true
+        default: "apply"
+        type: choice
+        options:
+          - apply
+          - destroy
+      environment:
+        description: "Target Environment"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+      server_count:
+        description: "Number of EC2 Web Servers"
+        required: true
+        default: "2"
+        type: choice
+        options:
+          - "1"
+          - "2"
+          - "3"
 
 jobs:
   devsecops-and-deploy:
-    name: "Security Scan & Terraform Apply"
+    name: "Security Scan & Terraform Provisioning"
     runs-on: ubuntu-latest
 
     steps:
@@ -20,7 +48,7 @@ jobs:
           terraform_version: 1.5.0
 
       - name: Terraform Format Check
-        run: terraform fmt -check
+        run: terraform fmt -check -recursive
 
       - name: Security Scan (Tfsec)
         uses: aquasecurity/tfsec-action@v1.0.0
@@ -33,8 +61,22 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-      - name: Terraform Apply
-        run: terraform apply -auto-approve
+      - name: Terraform Apply (Self-Service Provisioning)
+        if: ${{ github.event.inputs.action != 'destroy' }}
+        run: |
+          terraform apply -auto-approve \
+            -var="environment=${{ github.event.inputs.environment || 'production' }}" \
+            -var="server_count=${{ github.event.inputs.server_count || '2' }}"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Terraform Destroy (Cleanup)
+        if: ${{ github.event.inputs.action == 'destroy' }}
+        run: |
+          terraform destroy -auto-approve \
+            -var="environment=${{ github.event.inputs.environment || 'production' }}" \
+            -var="server_count=${{ github.event.inputs.server_count || '2' }}"
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
