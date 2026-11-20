@@ -21,8 +21,3 @@ variable "environment" {
   type        = string
   default     = "Production-v2"
 }
-variable "instance_type" {
-  description = "EC2 instance type for web servers"
-  type        = string
-  default     = "t2.micro"
-}

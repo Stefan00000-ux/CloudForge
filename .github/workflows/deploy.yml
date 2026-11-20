@@ -71,10 +71,12 @@ jobs:
         with:
           soft_fail: true
 
-      - name: Terraform Init
-        run: terraform init
+      - - name: Terraform Init
+        run: |
+          mkdir -p "$HOME/.terraform.d/plugin-cache"
+          terraform init
         env:
-          TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
+          TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/tf-plugin-cache
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
