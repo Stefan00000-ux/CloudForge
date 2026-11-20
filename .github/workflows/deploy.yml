@@ -1,51 +1,67 @@
-name: "CloudForge CI/CD Pipeline"
+name: CloudForge CI/CD Pipeline
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
   workflow_dispatch:
     inputs:
       action:
-        description: "Infrastructure Action (Deploy or Destroy)"
+        description: 'Infrastructure Action'
         required: true
-        default: "apply"
+        default: 'apply'
         type: choice
         options:
           - apply
           - destroy
       environment:
-        description: "Target Environment"
+        description: 'Target Environment'
         required: true
-        default: "production"
+        default: 'production'
         type: choice
         options:
-          - dev
-          - staging
           - production
+          - staging
+          - dev
       server_count:
-        description: "Number of EC2 Web Servers"
+        description: 'Number of EC2 Web Servers'
         required: true
-        default: "2"
+        default: '2'
         type: choice
         options:
-          - "1"
-          - "2"
-          - "3"
+          - '1'
+          - '2'
+          - '3'
+      instance_type:
+        description: 'EC2 Instance Size'
+        required: true
+        default: 't2.micro'
+        type: choice
+        options:
+          - t2.micro
+          - t3.micro
 
 jobs:
-  devsecops-and-deploy:
-    name: "Security Scan & Terraform Provisioning"
+  provision:
+    name: Security Scan & Terraform Provisioning
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
+        uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.5.0
+          terraform_version: 1.6.0
+          terraform_wrapper: false
+
+      - name: Cache Terraform Providers
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: ${{ runner.os }}-terraform-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: |
+            ${{ runner.os }}-terraform-
 
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
@@ -58,6 +74,7 @@ jobs:
       - name: Terraform Init
         run: terraform init
         env:
+          TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
@@ -66,17 +83,27 @@ jobs:
         run: |
           terraform apply -auto-approve \
             -var="environment=${{ github.event.inputs.environment || 'production' }}" \
-            -var="server_count=${{ github.event.inputs.server_count || '2' }}"
+            -var="server_count=${{ github.event.inputs.server_count || '2' }}" \
+            -var="instance_type=${{ github.event.inputs.instance_type || 't2.micro' }}"
+          terraform output -json live_server_endpoints > endpoints.json
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Upload Live Server Endpoints
+        if: ${{ github.event.inputs.action != 'destroy' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudforge-endpoints
+          path: endpoints.json
 
       - name: Terraform Destroy (Cleanup)
         if: ${{ github.event.inputs.action == 'destroy' }}
         run: |
           terraform destroy -auto-approve \
             -var="environment=${{ github.event.inputs.environment || 'production' }}" \
-            -var="server_count=${{ github.event.inputs.server_count || '2' }}"
+            -var="server_count=${{ github.event.inputs.server_count || '2' }}" \
+            -var="instance_type=${{ github.event.inputs.instance_type || 't2.micro' }}"
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

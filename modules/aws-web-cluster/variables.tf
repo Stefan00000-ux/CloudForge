@@ -13,7 +13,7 @@ variable "server_count" {
 variable "instance_type" {
   description = "EC2 instance size"
   type        = string
-  default     = "t3.micro"
+  default     = "t2.micro"
 }
 
 variable "vpc_cidr" {

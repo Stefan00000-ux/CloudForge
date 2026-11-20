@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CloudForge — Self-Service Cloud Control Plane</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card: #131c31;
+      --border: #233152;
+      --primary: #38bdf8;
+      --primary-hover: #0284c7;
+      --success: #10b981;
+      --danger: #ef4444;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { margin: 0; background: var(--bg); color: var(--text); padding: 24px; }
+    .container { max-width: 1050px; margin: 0 auto; }
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 24px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand h1 { margin: 0; font-size: 24px; color: var(--primary); }
+    .badge {
+      background: rgba(16, 185, 129, 0.15); color: var(--success);
+      padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    }
+    .grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 24px; }
+    @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 22px;
+    }
+    .card h2 { margin-top: 0; font-size: 18px; margin-bottom: 16px; }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; margin-top: 14px; }
+    input, select {
+      width: 100%; padding: 10px 12px; border-radius: 8px;
+      background: #0f172a; border: 1px solid var(--border); color: var(--text); font-size: 14px;
+    }
+    .btn-row { display: flex; gap: 12px; margin-top: 22px; }
+    button {
+      flex: 1; padding: 12px; border: none; border-radius: 8px; font-weight: 600;
+      cursor: pointer; font-size: 14px; transition: 0.2s;
+    }
+    .btn-deploy { background: var(--primary); color: #0b1120; }
+    .btn-deploy:hover { background: var(--primary-hover); color: #fff; }
+    .btn-destroy { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); }
+    .btn-destroy:hover { background: var(--danger); color: #fff; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .status-box {
+      background: #0f172a; border: 1px solid var(--border); border-radius: 8px;
+      padding: 14px; font-size: 13px; margin-bottom: 16px; line-height: 1.6;
+    }
+    .step { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #1e293b; }
+    .step:last-child { border-bottom: none; }
+    .server-card {
+      background: #0f172a; border: 1px solid var(--success); border-radius: 8px;
+      padding: 14px; margin-top: 12px; display: flex; justify-content: space-between; align-items: center;
+    }
+    .server-card a {
+      background: var(--success); color: #0b1120; text-decoration: none;
+      padding: 6px 14px; border-radius: 6px; font-weight: 600; font-size: 13px;
+    }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <h1>CloudForge Control Plane</h1>
+        <span class="badge">AWS DevSecOps Self-Service</span>
+      </div>
+      <div style="font-size: 13px; color: var(--muted);">Region: <strong>us-east-2 (Ohio)</strong></div>
+    </header>
+
+    <div class="grid">
+      <!-- Left: Self-Service Provisioning Form -->
+      <div class="card">
+        <h2>1. Configure & Launch Infrastructure</h2>
+
+        <label>GitHub Personal Access Token (Workflow Scope)</label>
+        <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" />
+        <div class="hint">Stored locally in your browser session only. AWS keys stay encrypted on server.</div>
+
+        <label>Target Environment</label>
+        <select id="env">
+          <option value="production">Production (Isolated Cluster)</option>
+          <option value="staging">Staging (Pre-Release)</option>
+          <option value="dev">Development (Sandbox)</option>
+        </select>
+
+        <label>Number of EC2 Web Servers</label>
+        <select id="count">
+          <option value="1">1 Instance (Single Node)</option>
+          <option value="2" selected>2 Instances (High Availability)</option>
+          <option value="3">3 Instances (Scaled Cluster)</option>
+        </select>
+
+        <label>Compute Instance Size</label>
+        <select id="instanceType">
+          <option value="t2.micro" selected>t2.micro (1 vCPU, 1 GB RAM — Free Tier)</option>
+          <option value="t3.micro">t3.micro (2 vCPU, 1 GB RAM — Burstable)</option>
+        </select>
+
+        <div class="btn-row">
+          <button class="btn-deploy" id="deployBtn" onclick="triggerWorkflow('apply')">🚀 Provision Servers</button>
+          <button class="btn-destroy" id="destroyBtn" onclick="triggerWorkflow('destroy')">🗑️ Destroy All</button>
+        </div>
+      </div>
+
+      <!-- Right: Live Execution Tracker & Endpoints -->
+      <div class="card">
+        <h2>2. Live Provisioning Pipeline & Endpoints</h2>
+        <div class="status-box" id="statusBanner">
+          Ready. Configure your cluster on the left and click <strong>Provision Servers</strong> to deploy via Terraform + tfsec.
+        </div>
+
+        <div id="pipelineSteps">
+          <div class="step"><span>1. Static Security Audit (tfsec)</span><span id="s1">Waiting</span></div>
+          <div class="step"><span>2. Terraform Module Provisioning</span><span id="s2">Waiting</span></div>
+          <div class="step"><span>3. Nginx & IMDSv2 Bootstrap</span><span id="s3">Waiting</span></div>
+        </div>
+
+        <h3 style="font-size: 15px; margin-top: 22px; margin-bottom: 6px;">Active Cloud Endpoints</h3>
+        <div id="endpointsList">
+          <div class="hint">No active deployment fetched yet. Click "Load Latest Live Servers" or launch a new cluster.</div>
+        </div>
+        <button style="margin-top: 14px; background: #1e293b; color: var(--text);" onclick="fetchLatestEndpoints()">
+          🔄 Sync Active Servers from AWS/GitHub
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const OWNER = "Stefan00000-ux";
+    const REPO = "CloudForge";
+    const WORKFLOW_FILE = "deploy.yml";
+
+    // Auto-save token in sessionStorage for smooth demo
+    const tokenInput = document.getElementById("ghToken");
+    tokenInput.value = sessionStorage.getItem("cf_pat") || "";
+    tokenInput.addEventListener("input", () => sessionStorage.setItem("cf_pat", tokenInput.value.trim()));
+
+    function getHeaders() {
+      const token = tokenInput.value.trim();
+      if (!token) { alert("Please enter your GitHub Token first."); throw new Error("Missing token"); }
+      return {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json"
+      };
+    }
+
+    async function triggerWorkflow(action) {
+      const headers = getHeaders();
+      const environment = document.getElementById("env").value;
+      const server_count = document.getElementById("count").value;
+      const instance_type = document.getElementById("instanceType").value;
+
+      document.getElementById("deployBtn").disabled = true;
+      document.getElementById("destroyBtn").disabled = true;
+      document.getElementById("statusBanner").innerHTML =
+        `⏳ Dispatching <strong>${action.toUpperCase()}</strong> request (${server_count}x ${instance_type} in <strong>${environment}</strong>)...`;
+
+      const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW_FILE}/dispatches`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          ref: "main",
+          inputs: { action, environment, server_count, instance_type }
+        })
+      });
+
+      if (!res.ok) {
+        document.getElementById("statusBanner").innerHTML = `❌ Failed to trigger workflow (HTTP ${res.status}). Check token permissions.`;
+        document.getElementById("deployBtn").disabled = false;
+        document.getElementById("destroyBtn").disabled = false;
+        return;
+      }
+
+      document.getElementById("s1").innerText = "🔄 Queued...";
+      document.getElementById("s2").innerText = "⏳ Pending";
+      document.getElementById("s3").innerText = "⏳ Pending";
+
+      setTimeout(() => pollLatestRun(action), 4000);
+    }
+
+    async function pollLatestRun(action) {
+      const headers = getHeaders();
+      const interval = setInterval(async () => {
+        const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/actions/runs?per_page=1`, { headers });
+        const data = await res.json();
+        const run = data.workflow_runs[0];
+        if (!run) return;
+
+        document.getElementById("statusBanner").innerHTML =
+          `⚙️ Pipeline Run <strong>#${run.run_number}</strong> is <strong>${run.status.toUpperCase()}</strong> ` +
+          `(<a href="${run.html_url}" target="_blank" style="color:var(--primary)">View Logs</a>)`;
+
+        if (run.status === "in_progress") {
+          document.getElementById("s1").innerText = "✅ Passed";
+          document.getElementById("s2").innerText = "🔄 Provisioning AWS...";
+        }
+
+        if (run.status === "completed") {
+          clearInterval(interval);
+          document.getElementById("deployBtn").disabled = false;
+          document.getElementById("destroyBtn").disabled = false;
+
+          if (run.conclusion === "success") {
+            document.getElementById("s1").innerText = "✅ Passed";
+            document.getElementById("s2").innerText = "✅ Complete";
+            document.getElementById("s3").innerText = action === "destroy" ? "🗑️ Destroyed" : "✅ Live";
+            document.getElementById("statusBanner").innerHTML =
+              action === "destroy"
+                ? `🗑️ All AWS resources destroyed cleanly. Cost is now ₹0.`
+                : `✅ Infrastructure provisioned successfully! Fetching live server URLs...`;
+
+            if (action === "destroy") {
+              document.getElementById("endpointsList").innerHTML = `<div class="hint">All servers terminated.</div>`;
+            } else {
+              await fetchEndpointsFromRun(run.id);
+            }
+          } else {
+            document.getElementById("statusBanner").innerHTML =
+              `❌ Pipeline failed (${run.conclusion}). <a href="${run.html_url}" target="_blank" style="color:var(--primary)">Inspect error logs</a>.`;
+          }
+        }
+      }, 5000);
+    }
+
+    async function fetchLatestEndpoints() {
+      const headers = getHeaders();
+      const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/actions/runs?status=success&per_page=1`, { headers });
+      const data = await res.json();
+      if (data.workflow_runs && data.workflow_runs[0]) {
+        await fetchEndpointsFromRun(data.workflow_runs[0].id);
+      }
+    }
+
+    async function fetchEndpointsFromRun(runId) {
+      const headers = getHeaders();
+      const artRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/actions/runs/${runId}/artifacts`, { headers });
+      const artData = await artRes.json();
+      const artifact = artData.artifacts.find(a => a.name === "cloudforge-endpoints");
+
+      if (!artifact) {
+        document.getElementById("endpointsList").innerHTML = `<div class="hint">No active endpoints found in latest run.</div>`;
+        return;
+      }
+
+      const zipRes = await fetch(artifact.archive_download_url, { headers });
+      const blob = await zipRes.blob();
+      const zip = await JSZip.loadAsync(blob);
+      const jsonText = await zip.file("endpoints.json").async("string");
+      const urls = JSON.parse(jsonText);
+
+      const listEl = document.getElementById("endpointsList");
+      listEl.innerHTML = urls.map((url, i) => `
+        <div class="server-card">
+          <div>
+            <strong>CloudForge Node #${i + 1}</strong><br/>
+            <span style="font-size:13px; color:var(--muted);">${url}</span>
+          </div>
+          <a href="${url}" target="_blank">Open Live Dashboard ↗</a>
+        </div>
+      `).join("");
+    }
+  </script>
+</body>
+</html>
