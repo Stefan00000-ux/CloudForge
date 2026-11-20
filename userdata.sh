@@ -1,45 +1,42 @@
 #!/bin/bash
-yum update -y
-yum install -y nginx
-systemctl start nginx
-systemctl enable nginx
+apt-get update -y
+apt-get install -y nginx curl
 
-# Fetch live AWS EC2 Instance Metadata (IMDSv2)
+# Fetch IMDSv2 Token
 TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
 INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
-AZ=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/availability-zone)
 PRIVATE_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)
+PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
+AZ=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/availability-zone)
 
-cat <<EOF > /usr/share/nginx/html/index.html
+cat <<EOF > /var/www/html/index.html
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>CloudForge | Live Automated Infrastructure</title>
+  <meta charset="UTF-8" />
+  <title>CloudForge Live Node</title>
   <style>
-    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 32px; max-width: 520px; width: 90%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
-    .badge { display: inline-block; background: #10b981; color: #022c22; font-weight: bold; padding: 4px 12px; border-radius: 999px; font-size: 12px; margin-bottom: 16px; }
-    h1 { margin: 0 0 8px 0; font-size: 24px; color: #38bdf8; }
-    p { color: #94a3b8; font-size: 14px; margin-bottom: 24px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .box { background: #0f172a; padding: 12px; border-radius: 8px; border: 1px solid #334155; }
-    .label { font-size: 11px; color: #64748b; text-transform: uppercase; }
-    .val { font-size: 14px; font-weight: bold; color: #e2e8f0; margin-top: 4px; }
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 32px; max-width: 480px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.4); }
+    h1 { color: #38bdf8; margin-top: 0; font-size: 1.5rem; }
+    .badge { background: #065f46; color: #6ee7b7; padding: 4px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+    .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #334155; }
+    .label { color: #94a3b8; }
+    .val { font-family: monospace; color: #e2e8f0; }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="badge">● LIVE & SECURED VIA DEVSECOPS</div>
-    <h1>CloudForge Infrastructure</h1>
-    <p>Provisioned automatically via Reusable Terraform Module & GitHub Actions CI/CD.</p>
-    <div class="grid">
-      <div class="box"><div class="label">EC2 Instance ID</div><div class="val">$INSTANCE_ID</div></div>
-      <div class="box"><div class="label">Availability Zone</div><div class="val">$AZ</div></div>
-      <div class="box"><div class="label">Private IP</div><div class="val">$PRIVATE_IP</div></div>
-      <div class="box"><div class="label">Security Scan</div><div class="val">tfsec Verified ✓</div></div>
-    </div>
+    <span class="badge">IMDSv2 Hardened &bull; Nginx Active</span>
+    <h1>CloudForge Provisioned Node</h1>
+    <div class="row"><span class="label">Instance ID</span><span class="val">${INSTANCE_ID}</span></div>
+    <div class="row"><span class="label">Public IP</span><span class="val">${PUBLIC_IP}</span></div>
+    <div class="row"><span class="label">Private IP</span><span class="val">${PRIVATE_IP}</span></div>
+    <div class="row"><span class="label">Availability Zone</span><span class="val">${AZ}</span></div>
   </div>
 </body>
 </html>
 EOF
+
+systemctl enable nginx
+systemctl restart nginx
