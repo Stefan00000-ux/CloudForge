@@ -71,7 +71,7 @@ jobs:
         with:
           soft_fail: true
 
-      - - name: Terraform Init
+      - name: Terraform Init
         run: |
           mkdir -p "$HOME/.terraform.d/plugin-cache"
           terraform init
