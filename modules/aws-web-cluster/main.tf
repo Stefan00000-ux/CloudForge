@@ -1,92 +1,81 @@
-data "aws_ami" "amazon_linux" {
+data "aws_ami" "ubuntu" {
   most_recent = true
-  owners      = ["amazon"]
+  owners      = ["099720109477"] # Canonical
 
   filter {
     name   = "name"
-    values = ["al2023-ami-2023.*-x86_64"]
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
   }
 }
 
-resource "aws_vpc" "this" {
-  cidr_block           = var.vpc_cidr
-  enable_dns_hostnames = true
-  tags = {
-    Name = "CloudForge-VPC-${var.environment}"
+data "aws_vpc" "default" {
+  default = true
+}
+
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
   }
 }
 
-resource "aws_subnet" "this" {
-  vpc_id                  = aws_vpc.this.id
-  cidr_block              = var.subnet_cidr
-  map_public_ip_on_launch = true
-  tags = {
-    Name = "CloudForge-Subnet-${var.environment}"
-  }
-}
-
-resource "aws_internet_gateway" "this" {
-  vpc_id = aws_vpc.this.id
-  tags = {
-    Name = "CloudForge-IGW-${var.environment}"
-  }
-}
-
-resource "aws_route_table" "this" {
-  vpc_id = aws_vpc.this.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.this.id
-  }
-
-  tags = {
-    Name = "CloudForge-RT-${var.environment}"
-  }
-}
-
-resource "aws_route_table_association" "this" {
-  subnet_id      = aws_subnet.this.id
-  route_table_id = aws_route_table.this.id
-}
-
-resource "aws_security_group" "this" {
-  name        = "cloudforge-sg-${var.environment}"
-  description = "Allow HTTP and SSH access"
-  vpc_id      = aws_vpc.this.id
+resource "aws_security_group" "web_sg" {
+  name_prefix = "cloudforge-${var.environment}-sg-"
+  description = "Allow HTTP inbound traffic for CloudForge web servers"
+  vpc_id      = data.aws_vpc.default.id
 
   ingress {
+    description = "HTTP access"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   egress {
+    description = "Allow all outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-}
-
-resource "aws_instance" "this" {
-  count                  = var.server_count
-  ami                    = data.aws_ami.amazon_linux.id
-  instance_type          = var.instance_type
-  subnet_id              = aws_subnet.this.id
-  vpc_security_group_ids = [aws_security_group.this.id]
-
-  user_data = file("${path.root}/userdata.sh")
 
   tags = {
-    Name = "CloudForge-Server-${count.index + 1}-${var.environment}"
+    Name        = "cloudforge-${var.environment}-sg"
+    Environment = var.environment
+    ManagedBy   = "CloudForge"
+  }
+}
+
+resource "aws_instance" "web" {
+  count                       = var.server_count
+  ami                         = data.aws_ami.ubuntu.id
+  instance_type               = var.instance_type
+  subnet_id                   = data.aws_subnets.default.ids[count.index % length(data.aws_subnets.default.ids)]
+  vpc_security_group_ids      = [aws_security_group.web_sg.id]
+  associate_public_ip_address = true
+  user_data                   = file("${path.root}/userdata.sh")
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }
+
+  root_block_device {
+    volume_type = "gp3"
+    volume_size = 8
+    encrypted   = true
+  }
+
+  tags = {
+    Name        = "cloudforge-${var.environment}-node-${count.index + 1}"
+    Environment = var.environment
+    ManagedBy   = "CloudForge"
   }
 }
